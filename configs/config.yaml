@@ -1,0 +1,176 @@
+# ============================================================
+# AI Portfolio Analyzer — Configuration
+# ============================================================
+
+# --- Data Settings ---
+data:
+  tickers:
+    # Tech
+    - AAPL
+    - MSFT
+    - NVDA
+    - TSLA
+    - AMZN
+    - META
+    - GOOGL
+    - AMD
+    - INTC
+    - QCOM
+    - MU
+    - CRM
+    - ORCL
+    - NFLX
+    - PYPL
+    # Finance
+    - JPM
+    - BAC
+    - GS
+    - V
+    - MA
+    # Healthcare
+    - UNH
+    - JNJ
+    # Consumer
+    - WMT
+    - COST
+    - HD
+    - DIS
+    # Energy
+    - XOM
+    - CVX
+    # Broad ETFs
+    - SPY
+    - QQQ
+    - IWM
+    - DIA
+    # Sector ETFs
+    - XLF
+    - XLK
+    - XLE
+    - XLV
+    - XLI
+    # International ETFs
+    - EWJ
+    - EWZ
+    - FXI
+    # Bonds
+    - TLT
+    - HYG
+    - LQD
+    # Commodities
+    - GLD
+    - SLV
+    # Volatility
+    - UVXY
+  benchmark: SPY
+  start_date: "2010-01-01"
+  end_date: "2024-12-31"
+  raw_dir: data/raw
+  processed_dir: data/processed
+  sequence_length: 60          # look-back window (trading days)
+  forecast_horizon: 21         # predict ~1 month ahead
+
+# --- Feature Engineering ---
+features:
+  use_technical: true
+  use_sentiment: true
+  rolling_windows: [5, 10, 20, 50, 200]
+  rsi_period: 14
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+  bb_period: 20
+  bb_std: 2.0
+  atr_period: 14
+
+# --- Model Settings ---
+model:
+  type: lstm           # options: lstm | transformer | xgboost | lightgbm
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.4
+  attention_heads: 4   # transformer only
+  ffn_dim: 256         # transformer only
+  output_size: 3       # [return, volatility, downside_prob]
+  use_uncertainty: true
+
+# --- Training Settings ---
+training:
+  batch_size: 256
+  learning_rate: 0.0002
+  epochs: 150
+  optimizer: adam      # adam | adamw | sgd
+  weight_decay: 0.0001
+  early_stopping_patience: 20
+  val_split: 0.15
+  test_split: 0.15
+  seed: 42
+  checkpoint_dir: checkpoints
+  save_best_only: true
+
+# --- XGBoost / LightGBM Settings ---
+baseline:
+  type: xgboost        # xgboost | lightgbm
+  n_estimators: 500
+  max_depth: 6
+  learning_rate: 0.05
+  subsample: 0.8
+  colsample_bytree: 0.8
+  early_stopping_rounds: 50
+
+# --- News API Settings ---
+news:
+  provider: yahoo_rss  # yahoo_rss | newsapi | finnhub | alphavantage
+  max_articles: 30
+  lookback_hours: 72
+  cache_ttl_minutes: 30
+  newsapi_base_url: "https://newsapi.org/v2/everything"
+  finnhub_base_url: "https://finnhub.io/api/v1/company-news"
+  alphavantage_base_url: "https://www.alphavantage.co/query"
+
+# --- Sentiment Model ---
+sentiment:
+  model_name: "ProsusAI/finbert"
+  max_length: 512
+  batch_size: 8
+  recency_decay: 0.1      # lambda for exponential decay on article age
+  high_volume_threshold: 10  # articles that trigger uncertainty boost
+
+# --- Portfolio Optimization ---
+portfolio:
+  method: max_sharpe     # max_sharpe | min_volatility | risk_parity
+  risk_free_rate: 0.05
+  max_weight: 0.40       # max single-asset weight
+  min_weight: 0.01
+  transaction_cost: 0.001
+  rebalance_freq: monthly  # monthly | weekly
+  long_only: true
+
+# --- Backtesting ---
+backtest:
+  start_date: "2021-01-01"
+  end_date: "2024-12-31"
+  initial_capital: 100000
+  rebalance_freq: monthly
+  transaction_cost: 0.001
+  benchmark: SPY
+
+# --- Weights & Biases ---
+wandb:
+  enabled: true          # set true when you have a W&B account
+  project: ai-portfolio-analyzer
+  entity: "vedantdaga"              # your W&B username or team
+  run_name: ""            # auto-generated if empty
+  tags:
+    - lstm
+    - portfolio
+    - sentiment
+  log_freq: 10            # log every N batches
+
+# --- Dashboard Defaults ---
+dashboard:
+  default_ticker: AAPL
+  default_horizon: 21
+  theme: dark
+  host: "0.0.0.0"
+  port: 8501
