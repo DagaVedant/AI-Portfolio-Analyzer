@@ -310,9 +310,11 @@ def fetch_news(
     cfg: Dict,
     max_articles: Optional[int] = None,
 ) -> List[Dict]:
-    """Fetch news for a ticker using the best available provider.
+    """Fetch news for a ticker from ALL available providers and merge results.
 
-    Falls back automatically: newsapi → finnhub → alphavantage → yahoo_rss → gdelt
+    Runs every provider that has a valid API key (or no key required),
+    then deduplicates by URL and sorts by recency. This means Yahoo RSS
+    and NewsAPI (and Finnhub if keyed) all contribute articles.
 
     All API keys are read from environment variables:
         NEWSAPI_KEY, FINNHUB_KEY, AV_KEY
@@ -321,51 +323,54 @@ def fetch_news(
     max_art = max_articles or ncfg.get("max_articles", 30)
     lookback = ncfg.get("lookback_hours", 72)
 
-    newsapi_key = os.getenv("NEWSAPI_KEY", "")
-    finnhub_key = os.getenv("FINNHUB_KEY", "")
-    av_key = os.getenv("AV_KEY", "")
-    preferred = ncfg.get("provider", "yahoo_rss").lower()
+    newsapi_key = os.getenv("NEWSAPI_KEY", "").strip()
+    finnhub_key = os.getenv("FINNHUB_KEY", "").strip()
+    av_key = os.getenv("AV_KEY", "").strip()
 
-    articles: List[Dict] = []
+    all_articles: List[Dict] = []
 
-    # Try preferred provider first, then cascade
-    providers_tried = set()
+    # 1. Yahoo RSS — always free, no key needed
+    yahoo = fetch_yahoo_rss(ticker, max_articles=max_art)
+    if yahoo:
+        logger.info(f"Yahoo RSS contributed {len(yahoo)} articles")
+        all_articles.extend(yahoo)
 
-    def try_provider(name: str) -> List[Dict]:
-        if name in providers_tried:
-            return []
-        providers_tried.add(name)
-        if name == "newsapi" and newsapi_key:
-            return fetch_newsapi(ticker, newsapi_key, lookback_hours=lookback, max_articles=max_art)
-        elif name == "finnhub" and finnhub_key:
-            return fetch_finnhub(ticker, finnhub_key, lookback_days=lookback // 24, max_articles=max_art)
-        elif name == "alphavantage" and av_key:
-            return fetch_alphavantage(ticker, av_key, max_articles=max_art)
-        elif name == "yahoo_rss":
-            return fetch_yahoo_rss(ticker, max_articles=max_art)
-        elif name == "gdelt":
-            company = TICKER_NAMES.get(ticker.upper(), ticker)
-            return fetch_gdelt(ticker, company_name=company, max_articles=max_art)
-        return []
+    # 2. NewsAPI — if key available
+    if newsapi_key:
+        newsapi = fetch_newsapi(ticker, newsapi_key, lookback_hours=lookback, max_articles=max_art)
+        if newsapi:
+            logger.info(f"NewsAPI contributed {len(newsapi)} articles")
+            all_articles.extend(newsapi)
 
-    # 1. Try preferred
-    articles = try_provider(preferred)
+    # 3. Finnhub — if key available
+    if finnhub_key:
+        finnhub = fetch_finnhub(ticker, finnhub_key, lookback_days=lookback // 24, max_articles=max_art)
+        if finnhub:
+            logger.info(f"Finnhub contributed {len(finnhub)} articles")
+            all_articles.extend(finnhub)
 
-    # 2. Cascade through fallbacks if needed
-    if not articles:
-        for fallback in ["newsapi", "finnhub", "alphavantage", "yahoo_rss", "gdelt"]:
-            articles = try_provider(fallback)
-            if articles:
-                logger.info(f"Used fallback provider: {fallback}")
-                break
+    # 4. Alpha Vantage — if key available
+    if av_key:
+        av = fetch_alphavantage(ticker, av_key, max_articles=max_art)
+        if av:
+            logger.info(f"Alpha Vantage contributed {len(av)} articles")
+            all_articles.extend(av)
 
-    # Sort by recency (newest first), deduplicate by URL
+    # 5. GDELT fallback — only if nothing else worked
+    if not all_articles:
+        company = TICKER_NAMES.get(ticker.upper(), ticker)
+        gdelt = fetch_gdelt(ticker, company_name=company, max_articles=max_art)
+        if gdelt:
+            logger.info(f"GDELT fallback contributed {len(gdelt)} articles")
+            all_articles.extend(gdelt)
+
+    # Deduplicate by URL, sort newest first, cap at max_art
     seen_urls = set()
     unique = []
-    for a in sorted(articles, key=lambda x: x["published"], reverse=True):
+    for a in sorted(all_articles, key=lambda x: x["published"], reverse=True):
         if a["url"] not in seen_urls and a["title"]:
             seen_urls.add(a["url"])
             unique.append(a)
 
-    logger.info(f"Total unique articles for {ticker}: {len(unique)}")
+    logger.info(f"Total unique articles for {ticker}: {len(unique)} (from {len(all_articles)} raw)")
     return unique[:max_art]

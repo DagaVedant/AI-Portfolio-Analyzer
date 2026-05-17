@@ -1,207 +1,301 @@
 """
-app.py — Main Streamlit dashboard for the AI Portfolio Analyzer.
+app.py — Redesigned dashboard for the AI Portfolio Analyzer.
 
 Run with:
     streamlit run dashboard/app.py
 
-Features:
-  - Dark mode with custom CSS
-  - Ticker input + horizon selector
-  - Live inference pipeline call
-  - Charts: price, forecast, volatility, drawdown, sentiment gauge, portfolio pie, risk breakdown
-  - News sentiment panel with article cards
-  - Portfolio recommendation with allocation bars
-  - Model info footer with disclaimer
+Changes:
+  - Removed Portfolio tab
+  - Removed all emojis from interface
+  - Full-screen loading animation while model runs
+  - NewsAPI used as primary sentiment provider
+  - Removed rotating animation
+  - Trimmed Overview: shows prediction prices instead of SMA/Volume
+  - Smooth CSS animations throughout
 """
 
 import sys
 import os
 
-# Ensure src/ is on the path when running from project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import streamlit as st
 
-# ── Page config (must be first Streamlit call) ────────────────────────────
 st.set_page_config(
     page_title="AI Portfolio Analyzer",
-    page_icon="📈",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ── Custom CSS ────────────────────────────────────────────────────────────
 CUSTOM_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;600&display=swap');
 
-/* ── Root overrides ── */
 html, body, [class*="css"] {
-    background-color: #0d1117 !important;
-    color: #e6edf3 !important;
-    font-family: 'Space Grotesk', sans-serif;
+    background-color: #080c12 !important;
+    color: #dde4f0 !important;
+    font-family: 'Syne', sans-serif;
 }
 
-/* ── Main container ── */
 .block-container {
     padding-top: 1.5rem;
     padding-bottom: 2rem;
     max-width: 1400px;
 }
 
-/* ── Header banner ── */
+/* ── Loading overlay ── */
+.loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(8,12,18,0.96);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.loader-ring {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 3px solid #1a2236;
+    border-top-color: #3ef5c8;
+    border-right-color: #3ef5c8;
+    animation: spin 1s cubic-bezier(0.68,-0.55,0.27,1.55) infinite;
+    margin-bottom: 24px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loader-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: #3ef5c8;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    animation: blink 1.4s ease-in-out infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.loader-sub {
+    font-size: 0.72rem;
+    color: #2e4060;
+    margin-top: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.1em;
+}
+
+/* ── Header ── */
 .header-banner {
-    background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
-    border: 1px solid #21262d;
-    border-top: 3px solid #00d4aa;
-    border-radius: 12px;
-    padding: 24px 32px;
+    background: linear-gradient(160deg, #0d1320 0%, #111827 60%, #0d1320 100%);
+    border: 1px solid #1e2d45;
+    border-left: 3px solid #3ef5c8;
+    border-radius: 10px;
+    padding: 22px 30px;
     margin-bottom: 24px;
     position: relative;
     overflow: hidden;
+    animation: slideDown 0.5s ease;
 }
-.header-banner::before {
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-16px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.header-banner::after {
     content: '';
     position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: radial-gradient(ellipse at 20% 50%, rgba(0,212,170,0.05) 0%, transparent 60%);
+    bottom: 0; right: 0;
+    width: 280px; height: 100%;
+    background: radial-gradient(ellipse at 80% 50%, rgba(62,245,200,0.06) 0%, transparent 70%);
     pointer-events: none;
 }
+
 .header-title {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: #e6edf3;
-    letter-spacing: -0.02em;
+    font-family: 'Syne', sans-serif;
+    font-size: 1.65rem;
+    font-weight: 800;
+    color: #dde4f0;
+    letter-spacing: -0.03em;
     margin-bottom: 4px;
 }
+
+.header-title .accent { color: #3ef5c8; }
+
 .header-sub {
-    color: #8b949e;
-    font-size: 0.85rem;
-    letter-spacing: 0.03em;
-}
-.accent-dot {
-    color: #00d4aa;
+    color: #4e6080;
+    font-size: 0.78rem;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
 }
 
 /* ── Sidebar ── */
 [data-testid="stSidebar"] {
-    background-color: #0d1117 !important;
-    border-right: 1px solid #21262d;
+    background-color: #080c12 !important;
+    border-right: 1px solid #141e2e;
 }
 [data-testid="stSidebar"] .block-container {
     padding-top: 1rem;
 }
 
-/* ── Input widgets ── */
-.stTextInput input, .stSelectbox select, .stSlider {
-    background-color: #161b22 !important;
-    border: 1px solid #30363d !important;
-    border-radius: 8px !important;
-    color: #e6edf3 !important;
-    font-family: 'IBM Plex Mono', monospace !important;
+/* ── Inputs ── */
+.stTextInput input {
+    background-color: #0f1824 !important;
+    border: 1px solid #1e2d45 !important;
+    border-radius: 7px !important;
+    color: #dde4f0 !important;
+    font-family: 'JetBrains Mono', monospace !important;
 }
 .stTextInput input:focus {
-    border-color: #00d4aa !important;
-    box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.12) !important;
+    border-color: #3ef5c8 !important;
+    box-shadow: 0 0 0 3px rgba(62,245,200,0.1) !important;
 }
 
-/* ── Primary button ── */
+/* ── Buttons ── */
 .stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #00d4aa, #00b894) !important;
-    color: #0d1117 !important;
-    font-weight: 700 !important;
+    background: linear-gradient(135deg, #3ef5c8, #00c9a7) !important;
+    color: #080c12 !important;
+    font-weight: 800 !important;
     border: none !important;
-    border-radius: 8px !important;
+    border-radius: 7px !important;
     padding: 0.55rem 1.8rem !important;
-    font-family: 'IBM Plex Mono', monospace !important;
-    letter-spacing: 0.04em !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+    font-size: 0.8rem !important;
     transition: all 0.2s ease !important;
 }
 .stButton > button[kind="primary"]:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 4px 16px rgba(0, 212, 170, 0.3) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(62,245,200,0.25) !important;
 }
 .stButton > button {
-    background-color: #21262d !important;
-    color: #e6edf3 !important;
-    border: 1px solid #30363d !important;
-    border-radius: 8px !important;
-    font-family: 'IBM Plex Mono', monospace !important;
+    background-color: #0f1824 !important;
+    color: #dde4f0 !important;
+    border: 1px solid #1e2d45 !important;
+    border-radius: 7px !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.8rem !important;
+    transition: all 0.15s ease !important;
 }
-
-/* ── Expander ── */
-.streamlit-expanderHeader {
-    background-color: #161b22 !important;
-    border: 1px solid #21262d !important;
-    border-radius: 8px !important;
-    color: #e6edf3 !important;
+.stButton > button:hover {
+    border-color: #3ef5c8 !important;
+    color: #3ef5c8 !important;
 }
 
 /* ── Tabs ── */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 4px;
-    background: #161b22;
-    border-radius: 10px;
+    gap: 2px;
+    background: #0f1824;
+    border-radius: 8px;
     padding: 4px;
+    border: 1px solid #1e2d45;
 }
 .stTabs [data-baseweb="tab"] {
-    color: #8b949e !important;
+    color: #4e6080 !important;
     background: transparent !important;
-    border-radius: 8px !important;
-    padding: 6px 16px !important;
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.83rem !important;
+    border-radius: 6px !important;
+    padding: 7px 18px !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.78rem !important;
+    letter-spacing: 0.04em !important;
+    text-transform: uppercase !important;
+    transition: all 0.2s ease !important;
 }
 .stTabs [aria-selected="true"] {
-    color: #e6edf3 !important;
-    background: #21262d !important;
-    border-bottom: 2px solid #00d4aa !important;
-}
-
-/* ── Spinner ── */
-.stSpinner > div > div {
-    border-top-color: #00d4aa !important;
+    color: #dde4f0 !important;
+    background: #1a2840 !important;
+    border-bottom: 2px solid #3ef5c8 !important;
 }
 
 /* ── Metric cards ── */
 [data-testid="stMetric"] {
-    background: #161b22;
-    border: 1px solid #21262d;
+    background: #0f1824;
+    border: 1px solid #1e2d45;
     border-radius: 10px;
-    padding: 12px 16px;
+    padding: 14px 16px;
+    animation: fadeUp 0.4s ease;
 }
-[data-testid="stMetricLabel"] { color: #8b949e !important; font-size: 0.72rem !important; }
-[data-testid="stMetricValue"] { color: #e6edf3 !important; font-family: 'IBM Plex Mono', monospace !important; }
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+[data-testid="stMetricLabel"] {
+    color: #4e6080 !important;
+    font-size: 0.7rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+[data-testid="stMetricValue"] {
+    color: #dde4f0 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+}
 
-/* ── Info / warning boxes ── */
+/* ── Alert ── */
 .stAlert {
     border-radius: 8px !important;
-    background-color: #161b22 !important;
-    border-color: #30363d !important;
+    background-color: #0f1824 !important;
+    border-color: #1e2d45 !important;
 }
+
+/* ── Spinner ── */
+.stSpinner > div > div {
+    border-top-color: #3ef5c8 !important;
+}
+
+/* ── Expander ── */
+.streamlit-expanderHeader {
+    background-color: #0f1824 !important;
+    border: 1px solid #1e2d45 !important;
+    border-radius: 8px !important;
+    color: #dde4f0 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.8rem !important;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #080c12; }
+::-webkit-scrollbar-thumb { background: #1e2d45; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3ef5c8; }
 
 /* ── Hide Streamlit branding ── */
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 
-/* ── Scrollbar ── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #0d1117; }
-::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #58a6ff; }
-
-/* ── Loading pulse animation ── */
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+/* ── Section animations ── */
+.section-animate {
+    animation: fadeUp 0.45s ease;
 }
-.loading-text { animation: pulse 1.5s infinite; color: #00d4aa; font-family: 'IBM Plex Mono', monospace; }
+
+/* ── Status dot ── */
+.status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #3ef5c8;
+    animation: pulse-dot 2s infinite;
+    display: inline-block;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(62,245,200,0.4); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 5px rgba(62,245,200,0); }
+}
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# ── Imports (after path setup) ─────────────────────────────────────────────
+# ── Imports ────────────────────────────────────────────────────────────────
 from src.utils import load_config, load_env
 from src.inference import run_inference
 from dashboard.components import (
@@ -209,14 +303,13 @@ from dashboard.components import (
     render_forecast_panel,
     render_risk_panel,
     render_sentiment_panel,
-    render_portfolio_panel,
     render_model_info,
     section_header,
     metric_card,
 )
 from dashboard.dashboard_utils import (
     price_chart, forecast_chart, volatility_chart,
-    drawdown_chart, sentiment_gauge, portfolio_pie,
+    drawdown_chart, sentiment_gauge,
     risk_breakdown_chart,
 )
 
@@ -224,7 +317,11 @@ from dashboard.dashboard_utils import (
 @st.cache_resource(show_spinner=False)
 def get_config():
     load_env()
-    return load_config("configs/config.yaml")
+    cfg = load_config("configs/config.yaml")
+    # Force NewsAPI as preferred provider if key is available
+    if os.getenv("NEWSAPI_KEY", "").strip():
+        cfg["news"]["provider"] = "newsapi"
+    return cfg
 
 
 # ── Session state ──────────────────────────────────────────────────────────
@@ -232,30 +329,31 @@ if "result" not in st.session_state:
     st.session_state.result = None
 if "last_ticker" not in st.session_state:
     st.session_state.last_ticker = ""
+if "is_loading" not in st.session_state:
+    st.session_state.is_loading = False
 
 
-# ────────────────────────────────────────────────────────────────────────────
-# HEADER
-# ────────────────────────────────────────────────────────────────────────────
+# ── Header ─────────────────────────────────────────────────────────────────
 st.markdown(
     """
     <div class="header-banner">
-        <div class="header-title">AI Portfolio Analyzer<span class="accent-dot">.</span></div>
+        <div class="header-title">AI Portfolio <span class="accent">Analyzer</span></div>
         <div class="header-sub">
-            Machine-learning driven stock analysis · News sentiment · Risk projection · Portfolio optimization
+            ML-driven forecasts &nbsp;&middot;&nbsp; News sentiment via NewsAPI
+            &nbsp;&middot;&nbsp; Risk projection
         </div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-# ────────────────────────────────────────────────────────────────────────────
-# SIDEBAR — Controls
-# ────────────────────────────────────────────────────────────────────────────
+
+# ── Sidebar ────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown(
-        '<div style="color:#00d4aa;font-family:IBM Plex Mono,monospace;'
-        'font-size:1rem;font-weight:700;margin-bottom:16px">⚙️ Controls</div>',
+        '<div style="color:#3ef5c8;font-family:JetBrains Mono,monospace;'
+        'font-size:0.82rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;'
+        'margin-bottom:18px">Controls</div>',
         unsafe_allow_html=True,
     )
 
@@ -267,19 +365,18 @@ with st.sidebar:
     ).upper().strip()
 
     popular = st.multiselect(
-        "Quick-pick popular tickers",
+        "Quick-pick tickers",
         ["AAPL", "MSFT", "NVDA", "TSLA", "META", "AMZN", "GOOGL", "AMD", "SPY", "QQQ"],
         default=[],
-        help="Click a ticker to override the input above",
     )
     if popular:
         ticker_input = popular[-1]
 
-    horizon = st.slider("Forecast horizon (trading days)", min_value=5, max_value=63, value=21, step=1)
+    horizon = st.slider("Forecast horizon (days)", min_value=5, max_value=63, value=21, step=1)
 
     st.markdown("---")
-    run_btn = st.button("🚀 Analyse", use_container_width=True, type="primary")
-    clear_btn = st.button("🗑 Clear", use_container_width=True)
+    run_btn = st.button("Analyse", use_container_width=True, type="primary")
+    clear_btn = st.button("Clear", use_container_width=True)
 
     if clear_btn:
         st.session_state.result = None
@@ -288,57 +385,68 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(
-        '<div style="color:#8b949e;font-size:0.72rem;line-height:1.6">'
-        '⚠️ <b>Disclaimer:</b> This tool is for <b>educational purposes only</b>. '
-        'No financial advice is given or implied. Always consult a qualified '
-        'financial advisor before investing.'
+        '<div style="color:#2e4060;font-size:0.68rem;line-height:1.75;'
+        'font-family:JetBrains Mono,monospace">'
+        'Educational purposes only. No financial advice given or implied. '
+        'Consult a qualified financial advisor before investing.'
         '</div>',
         unsafe_allow_html=True,
     )
 
-# ────────────────────────────────────────────────────────────────────────────
-# ANALYSIS TRIGGER
-# ────────────────────────────────────────────────────────────────────────────
+
+# ── Loading overlay + analysis trigger ────────────────────────────────────
 if run_btn and ticker_input:
     cfg = get_config()
     cfg["data"]["forecast_horizon"] = horizon
 
-    with st.spinner(f"Analysing {ticker_input} …"):
-        try:
-            result = run_inference(ticker_input, cfg)
-            if "error" in result:
-                st.error(f"❌ {result['error']}")
-                st.session_state.result = None
-            else:
-                st.session_state.result = result
-                st.session_state.last_ticker = ticker_input
-        except Exception as e:
-            st.error(f"Unexpected error: {e}")
-            st.session_state.result = None
+    # Show the custom loading overlay
+    loading_html = f"""
+    <div id="custom-loading" class="loading-overlay">
+        <div class="loader-ring"></div>
+        <div class="loader-text">Analysing {ticker_input}</div>
+        <div class="loader-sub">NewsAPI &middot; FinBERT &middot; LSTM model</div>
+    </div>
+    """
+    loading_placeholder = st.empty()
+    loading_placeholder.markdown(loading_html, unsafe_allow_html=True)
 
-# ────────────────────────────────────────────────────────────────────────────
-# RESULTS — Rendered only when data is available
-# ────────────────────────────────────────────────────────────────────────────
+    try:
+        result = run_inference(ticker_input, cfg)
+        if "error" in result:
+            loading_placeholder.empty()
+            st.error(result["error"])
+            st.session_state.result = None
+        else:
+            st.session_state.result = result
+            st.session_state.last_ticker = ticker_input
+            loading_placeholder.empty()
+    except Exception as e:
+        loading_placeholder.empty()
+        st.error(f"Unexpected error: {e}")
+        st.session_state.result = None
+
+
+# ── Results ────────────────────────────────────────────────────────────────
 result = st.session_state.result
 
 if result is None:
-    # Landing / empty state
     st.markdown(
         """
-        <div style="text-align:center;padding:80px 20px;color:#8b949e">
-            <div style="font-size:3.5rem;margin-bottom:16px">📈</div>
-            <div style="font-size:1.15rem;color:#e6edf3;font-weight:600;margin-bottom:8px">
+        <div style="text-align:center;padding:90px 20px">
+            <div style="font-size:1.9rem;font-weight:800;color:#dde4f0;margin-bottom:12px;
+                        font-family:'Syne',sans-serif;letter-spacing:-0.03em;animation:fadeUp 0.5s ease">
                 Enter a ticker and click Analyse
             </div>
-            <div style="font-size:0.88rem;line-height:1.7">
-                Get ML-powered return forecasts, risk projections, live news sentiment,<br>
-                and portfolio optimisation for any US stock or ETF.
+            <div style="font-size:0.8rem;line-height:1.9;font-family:'JetBrains Mono',monospace;
+                        color:#2e4060">
+                ML-powered return forecasts &nbsp;&middot;&nbsp; risk projections
+                &nbsp;&middot;&nbsp; live NewsAPI sentiment
             </div>
-            <div style="margin-top:24px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+            <div style="margin-top:28px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
         """ +
         "".join([
-            f'<span style="background:#161b22;border:1px solid #21262d;border-radius:20px;'
-            f'padding:5px 14px;font-size:0.80rem;color:#58a6ff">{t}</span>'
+            f'<span style="background:#0f1824;border:1px solid #1e2d45;border-radius:6px;'
+            f'padding:5px 14px;font-size:0.76rem;color:#3ef5c8;font-family:JetBrains Mono,monospace">{t}</span>'
             for t in ["AAPL", "MSFT", "NVDA", "TSLA", "META", "SPY", "QQQ"]
         ]) +
         """
@@ -350,38 +458,41 @@ if result is None:
     st.stop()
 
 
-# ────────────────────────────────────────────────────────────────────────────
-# TICKER TITLE BAR
-# ────────────────────────────────────────────────────────────────────────────
+# ── Ticker title bar ───────────────────────────────────────────────────────
 ticker = result.get("ticker", "")
 price = result.get("current_price", 0)
 r1d = result.get("daily_return", 0)
-r1d_color = "#00d4aa" if r1d >= 0 else "#ff6b6b"
-r1d_sign = "▲" if r1d >= 0 else "▼"
+r1d_color = "#3ef5c8" if r1d >= 0 else "#ff6b6b"
+r1d_sign = "+" if r1d >= 0 else ""
 outlook = result.get("outlook", "Neutral")
-outlook_colors = {"Bullish": "#00d4aa", "Bearish": "#ff6b6b", "Neutral": "#ffd166"}
+outlook_colors = {"Bullish": "#3ef5c8", "Bearish": "#ff6b6b", "Neutral": "#ffd166"}
 oc = outlook_colors.get(outlook, "#8b949e")
+sf = result.get("sentiment_features", {})
+news_count = sf.get("news_volume", 0)
 
 st.markdown(
     f"""
-    <div style="background:#161b22;border:1px solid #21262d;border-radius:10px;
-                padding:14px 24px;margin-bottom:16px;display:flex;
-                align-items:center;gap:24px;flex-wrap:wrap">
+    <div style="background:#0f1824;border:1px solid #1e2d45;border-radius:10px;
+                padding:14px 24px;margin-bottom:18px;display:flex;
+                align-items:center;gap:24px;flex-wrap:wrap;animation:slideDown 0.4s ease">
         <div>
-            <span style="font-family:'IBM Plex Mono',monospace;font-size:1.6rem;
-                         font-weight:800;color:#e6edf3">{ticker}</span>
-            <span style="font-size:1.3rem;font-weight:700;color:#e6edf3;
-                         margin-left:14px">${price:,.2f}</span>
-            <span style="color:{r1d_color};font-size:0.95rem;margin-left:8px">
-                {r1d_sign} {abs(r1d)*100:.2f}%
+            <span class="status-dot"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:1.5rem;
+                         font-weight:700;color:#dde4f0">{ticker}</span>
+            <span style="font-size:1.2rem;font-weight:700;color:#dde4f0;margin-left:14px">${price:,.2f}</span>
+            <span style="color:{r1d_color};font-size:0.88rem;margin-left:10px;
+                         font-family:'JetBrains Mono',monospace">
+                {r1d_sign}{abs(r1d)*100:.2f}%
             </span>
         </div>
-        <div style="background:{oc}22;color:{oc};padding:4px 14px;border-radius:20px;
-                    font-size:0.82rem;font-weight:700;border:1px solid {oc}44">
+        <div style="background:{oc}18;color:{oc};padding:4px 14px;border-radius:6px;
+                    font-size:0.75rem;font-weight:700;border:1px solid {oc}30;
+                    font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase">
             {outlook}
         </div>
-        <div style="color:#8b949e;font-size:0.78rem;margin-left:auto">
-            Updated: {result.get('timestamp','')[:19]} UTC
+        <div style="color:#2e4060;font-size:0.7rem;margin-left:auto;
+                    font-family:'JetBrains Mono',monospace">
+            NewsAPI + Yahoo RSS &middot; {news_count} articles &nbsp;|&nbsp; {result.get('timestamp','')[:19]} UTC
         </div>
     </div>
     """,
@@ -389,27 +500,72 @@ st.markdown(
 )
 
 
-# ────────────────────────────────────────────────────────────────────────────
-# TABBED SECTIONS
-# ────────────────────────────────────────────────────────────────────────────
-tab_overview, tab_forecast, tab_risk, tab_news, tab_portfolio, tab_charts = st.tabs([
-    "📊 Overview", "🔮 Forecast", "⚠️ Risk", "📰 Sentiment", "💼 Portfolio", "📉 Charts"
+# ── Tabs (no Portfolio tab) ────────────────────────────────────────────────
+tab_overview, tab_forecast, tab_risk, tab_news, tab_charts = st.tabs([
+    "Overview", "Forecast", "Risk", "Sentiment", "Charts"
 ])
 
 
-# ── Tab 1: Overview ──────────────────────────────────────────────────────
+# ── Tab 1: Overview ────────────────────────────────────────────────────────
 with tab_overview:
-    render_market_overview(result)
+    # Key metrics row
+    section_header("Market Snapshot", ticker)
 
-    st.markdown("<div style='margin-top:20px'></div>", unsafe_allow_html=True)
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        metric_card("Current Price", f"${price:,.2f}")
+    with c2:
+        r1d_val = result.get("daily_return", 0)
+        metric_card("1-Day Return", f"{'+' if r1d_val>=0 else ''}{r1d_val*100:.2f}%",
+                    color="#3ef5c8" if r1d_val >= 0 else "#ff6b6b")
+    with c3:
+        r30 = result.get("return_30d", 0)
+        metric_card("30-Day Return", f"{'+' if r30>=0 else ''}{r30*100:.2f}%",
+                    color="#3ef5c8" if r30 >= 0 else "#ff6b6b")
+    with c4:
+        r90 = result.get("return_90d", 0)
+        metric_card("90-Day Return", f"{'+' if r90>=0 else ''}{r90*100:.2f}%",
+                    color="#3ef5c8" if r90 >= 0 else "#ff6b6b")
 
-    col_chart, col_sent = st.columns([2, 1])
+    st.markdown("<div style='margin-top:24px'></div>", unsafe_allow_html=True)
+
+    # Prediction prices
+    section_header("Price Predictions", f"{result.get('forecast_horizon_days', 21)}-Day Horizon")
+
+    low_p = result.get("price_forecast_low", 0)
+    mid_p = result.get("price_forecast_mid", 0)
+    high_p = result.get("price_forecast_high", 0)
+    conf = result.get("model_confidence", 0)
+
+    c_low, c_mid, c_high, c_conf = st.columns(4)
+    with c_low:
+        low_chg = (low_p - price) / price if price else 0
+        metric_card("Bear Case", f"${low_p:,.2f}",
+                    delta=f"{'+' if low_chg>=0 else ''}{low_chg*100:.1f}%",
+                    color="#ff6b6b")
+    with c_mid:
+        mid_chg = (mid_p - price) / price if price else 0
+        metric_card("Base Case", f"${mid_p:,.2f}",
+                    delta=f"{'+' if mid_chg>=0 else ''}{mid_chg*100:.1f}%",
+                    color="#ffd166")
+    with c_high:
+        high_chg = (high_p - price) / price if price else 0
+        metric_card("Bull Case", f"${high_p:,.2f}",
+                    delta=f"{'+' if high_chg>=0 else ''}{high_chg*100:.1f}%",
+                    color="#3ef5c8")
+    with c_conf:
+        metric_card("Model Confidence", f"{conf*100:.0f}%",
+                    color="#3ef5c8" if conf > 0.6 else "#ffd166")
+
+    st.markdown("<div style='margin-top:24px'></div>", unsafe_allow_html=True)
+
+    # Price chart + sentiment gauge
+    col_chart, col_side = st.columns([2, 1])
     with col_chart:
         fig = price_chart(ticker, lookback_days=180)
         if fig:
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    with col_sent:
-        sf = result.get("sentiment_features", {})
+    with col_side:
         ws = sf.get("weighted_sentiment", 0.0)
         fig_g = sentiment_gauge(ws, label="Sentiment Score")
         if fig_g:
@@ -421,13 +577,14 @@ with tab_overview:
         risk_color = result.get("risk_color", "#8b949e")
         st.markdown(
             f"""
-            <div style="background:#161b22;border:1px solid {risk_color}44;
+            <div style="background:#0f1824;border:1px solid {risk_color}33;
                         border-radius:10px;padding:14px;text-align:center">
-                <div style="color:#8b949e;font-size:0.7rem;text-transform:uppercase;
-                            letter-spacing:0.1em">Risk Score</div>
-                <div style="color:{risk_color};font-size:2rem;font-weight:800;
-                            font-family:'IBM Plex Mono',monospace">{risk_score:.0f}</div>
-                <div style="color:{risk_color};font-size:0.88rem;font-weight:600">{risk_label}</div>
+                <div style="color:#2e4060;font-size:0.66rem;text-transform:uppercase;
+                            letter-spacing:0.14em;font-family:'JetBrains Mono',monospace">Risk Score</div>
+                <div style="color:{risk_color};font-size:2.2rem;font-weight:800;
+                            font-family:'JetBrains Mono',monospace;margin:6px 0">{risk_score:.0f}</div>
+                <div style="color:{risk_color};font-size:0.82rem;font-weight:700;
+                            letter-spacing:0.06em;text-transform:uppercase">{risk_label}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -436,7 +593,7 @@ with tab_overview:
     render_model_info(result)
 
 
-# ── Tab 2: Forecast ──────────────────────────────────────────────────────
+# ── Tab 2: Forecast ────────────────────────────────────────────────────────
 with tab_forecast:
     render_forecast_panel(result)
     st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
@@ -446,24 +603,24 @@ with tab_forecast:
     else:
         st.info("Forecast chart unavailable — check market data.")
 
-    # Sentiment adjustment table
     sa = result.get("sentiment_adjustment", {})
     if sa:
         section_header("Sentiment Adjustments Applied")
         c1, c2, c3, c4 = st.columns(4)
-        cols = [c1, c2, c3, c4]
-        items = [
-            ("Return Adj", sa.get("return_adj", 0), "±{:.3%}"),
-            ("Vol Adj", sa.get("vol_adj", 0), "+{:.3%}"),
-            ("Downside Adj", sa.get("downside_adj", 0), "+{:.3%}"),
-            ("Uncertainty Mult", sa.get("uncertainty_mult", 1), "{:.2f}×"),
-        ]
-        for col, (lbl, val, fmt) in zip(cols, items):
+        for col, (lbl, val, fmt) in zip(
+            [c1, c2, c3, c4],
+            [
+                ("Return Adj", sa.get("return_adj", 0), "{:+.3%}"),
+                ("Vol Adj", sa.get("vol_adj", 0), "+{:.3%}"),
+                ("Downside Adj", sa.get("downside_adj", 0), "+{:.3%}"),
+                ("Uncertainty", sa.get("uncertainty_mult", 1), "{:.2f}x"),
+            ],
+        ):
             with col:
                 metric_card(lbl, fmt.format(val))
 
 
-# ── Tab 3: Risk ──────────────────────────────────────────────────────────
+# ── Tab 3: Risk ────────────────────────────────────────────────────────────
 with tab_risk:
     render_risk_panel(result)
     st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
@@ -472,49 +629,14 @@ with tab_risk:
         st.plotly_chart(fig_rb, use_container_width=True, config={"displayModeBar": False})
 
 
-# ── Tab 4: News / Sentiment ──────────────────────────────────────────────
+# ── Tab 4: News / Sentiment ────────────────────────────────────────────────
 with tab_news:
     render_sentiment_panel(result)
 
 
-# ── Tab 5: Portfolio ─────────────────────────────────────────────────────
-with tab_portfolio:
-    render_portfolio_panel(result)
-    st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
-
-    port = result.get("portfolio", {})
-    weight_dict = port.get("weight_dict", {})
-
-    if weight_dict:
-        col_pie, col_rc = st.columns(2)
-        with col_pie:
-            fig_pie = portfolio_pie(weight_dict)
-            if fig_pie:
-                st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
-        with col_rc:
-            section_header("Risk Contributions")
-            rc = port.get("risk_contributions", {})
-            for t, rv in sorted(rc.items(), key=lambda x: -x[1]):
-                st.markdown(
-                    f"""
-                    <div style="display:flex;align-items:center;margin-bottom:5px">
-                        <span style="color:#e6edf3;width:60px;font-size:0.85rem;font-weight:600">{t}</span>
-                        <div style="flex:1;background:#21262d;border-radius:4px;height:16px;margin:0 10px">
-                            <div style="width:{min(rv*100,100):.1f}%;background:#bc8cff;height:100%;border-radius:4px"></div>
-                        </div>
-                        <span style="color:#bc8cff;font-size:0.82rem;width:50px;text-align:right">{rv*100:.1f}%</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-    st.markdown("<div style='margin-top:16px'></div>", unsafe_allow_html=True)
-    render_model_info(result)
-
-
-# ── Tab 6: Charts ────────────────────────────────────────────────────────
+# ── Tab 5: Charts ──────────────────────────────────────────────────────────
 with tab_charts:
-    section_header("📉 Technical Charts")
+    section_header("Technical Charts")
 
     col_vol, col_dd = st.columns(2)
     with col_vol:
@@ -530,7 +652,6 @@ with tab_charts:
         else:
             st.info("Drawdown chart unavailable.")
 
-    # Full price chart
     fig_price_full = price_chart(ticker, lookback_days=365)
     if fig_price_full:
         st.plotly_chart(fig_price_full, use_container_width=True, config={"displayModeBar": False})
