@@ -161,7 +161,7 @@ def init_wandb(cfg: Dict, job_type: str = "train") -> Optional[Any]:
             tags=wcfg.get("tags", []),
             config=cfg,
             job_type=job_type,
-            reinit="finish previous",
+            reinit="finish_previous",
         )
         logger.info(f"W&B run started: {run.url}")
         return run
