@@ -46,10 +46,6 @@ reports/figures/*.pdf
 # ── Weights & Biases ─────────────────────────────────────────
 wandb/
 
-# ── Jupyter ──────────────────────────────────────────────────
-.ipynb_checkpoints/
-*.ipynb_checkpoints
-
 # ── IDE ──────────────────────────────────────────────────────
 .vscode/
 .idea/
