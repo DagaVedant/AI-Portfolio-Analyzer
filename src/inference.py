@@ -172,7 +172,7 @@ def _load_model(cfg: Dict):
             if not model_path.exists():
                 return None, scaler, feature_cols
             model, _ = build_model(cfg, input_size=len(feature_cols))
-            ckpt = torch.load(model_path, map_location=detect_device(), weights_only=False)
+            ckpt = torch.load(model_path, map_location='cpu', weights_only=False)
             model.load_state_dict(ckpt["model_state"])
             model.eval()
         except Exception as e:
