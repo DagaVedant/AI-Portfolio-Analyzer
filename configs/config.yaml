@@ -96,12 +96,12 @@ model:
 
 # --- Training Settings ---
 training:
-  batch_size: 512
-  learning_rate: 0.0001
-  epochs: 200
+  batch_size: 256
+  learning_rate: 0.0002
+  epochs: 150
   optimizer: adam      # adam | adamw | sgd
   weight_decay: 0.0001
-  early_stopping_patience: 40
+  early_stopping_patience: 20
   val_split: 0.15
   test_split: 0.15
   seed: 42
@@ -112,8 +112,8 @@ training:
 baseline:
   type: xgboost        # xgboost | lightgbm
   n_estimators: 500
-  max_depth: 12
-  learning_rate: 0.005
+  max_depth: 6
+  learning_rate: 0.05
   subsample: 0.8
   colsample_bytree: 0.8
   early_stopping_rounds: 50
@@ -148,7 +148,7 @@ portfolio:
 
 # --- Backtesting ---
 backtest:
-  start_date: "2010-01-01"
+  start_date: "2021-01-01"
   end_date: "2024-12-31"
   initial_capital: 100000
   rebalance_freq: monthly

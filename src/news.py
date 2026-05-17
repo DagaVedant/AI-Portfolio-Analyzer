@@ -26,6 +26,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
 from urllib.parse import quote_plus
 
+import re
 import requests
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,37 @@ def _parse_rss_date(date_str: str) -> datetime:
 
 
 # ---------------------------------------------------------------------------
+# Relevance filter — shared by all providers
+# ---------------------------------------------------------------------------
+
+def _is_relevant(title: str, summary: str, ticker: str, company: str) -> bool:
+    """Return True if the article appears to be about this specific stock/company.
+
+    Checks the title and summary for the ticker symbol or key parts of the
+    company name, case-insensitively. Avoids false positives like an article
+    about "apple pie" matching AAPL, or "Amazon River" matching AMZN.
+    """
+    text = f"{title} {summary}".lower()
+    ticker_lower = ticker.lower()
+
+    # Always accept if the exact ticker appears as a word boundary
+    if re.search(rf"\b{re.escape(ticker_lower)}\b", text):
+        return True
+
+    # Accept if a significant word from the company name appears
+    # Split company name and require at least one meaningful word (>3 chars) to match
+    if company and company != ticker:
+        company_words = [w for w in company.lower().split() if len(w) > 3
+                         and w not in {"corp", "inc.", "inc", "ltd", "llc", "group",
+                                       "stock", "etf", "fund", "trust", "holdings"}]
+        for word in company_words:
+            if re.search(rf"\b{re.escape(word)}\b", text):
+                return True
+
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Provider: Yahoo Finance RSS (FREE — always available)
 # ---------------------------------------------------------------------------
 
@@ -118,7 +150,12 @@ def fetch_yahoo_rss(ticker: str, max_articles: int = 30) -> List[Dict]:
             if len(articles) >= max_articles:
                 break
 
-        logger.info(f"Yahoo RSS: {len(articles)} articles for {ticker}")
+        # Post-filter: Yahoo RSS feeds are ticker-scoped but can include
+        # tangentially related articles (e.g. sector news). Filter to keep
+        # only those that explicitly mention the ticker or company name.
+        company = TICKER_NAMES.get(ticker.upper(), ticker)
+        articles = [a for a in articles if _is_relevant(a["title"], a["summary"], ticker, company)]
+        logger.info(f"Yahoo RSS: {len(articles)} relevant articles for {ticker}")
     except Exception as e:
         logger.warning(f"Yahoo RSS failed for {ticker}: {e}")
 
@@ -136,14 +173,26 @@ def fetch_newsapi(
     max_articles: int = 30,
     base_url: str = "https://newsapi.org/v2/everything",
 ) -> List[Dict]:
-    """Fetch news from NewsAPI.org. Requires NEWSAPI_KEY."""
+    """Fetch news from NewsAPI.org. Requires NEWSAPI_KEY.
+
+    Queries using both ticker symbol AND company name to get relevant results,
+    then post-filters to drop any articles that don't actually mention the company.
+    """
     from_dt = (datetime.now(timezone.utc) - timedelta(hours=lookback_hours)).strftime("%Y-%m-%dT%H:%M:%S")
+    company = TICKER_NAMES.get(ticker.upper(), ticker)
+
+    # Build a targeted query: e.g. '"AAPL" OR "Apple" stock'
+    if company != ticker:
+        query = f'"{ticker}" OR "{company}" stock'
+    else:
+        query = f'"{ticker}" stock'
+
     params = {
-        "q": ticker,
+        "q": query,
         "from": from_dt,
         "language": "en",
         "sortBy": "publishedAt",
-        "pageSize": max_articles,
+        "pageSize": min(max_articles * 2, 100),  # fetch extra to account for filtering
         "apiKey": api_key,
     }
     articles = []
@@ -155,15 +204,25 @@ def fetch_newsapi(
         for art in data.get("articles", []):
             pub_str = art.get("publishedAt", "")
             published = _parse_rss_date(pub_str) if pub_str else datetime.now(timezone.utc)
+            title = art.get("title", "")
+            summary = art.get("description", "") or art.get("content", "")
+
+            # Post-filter: drop articles that don't mention the stock/company
+            if not _is_relevant(title, summary, ticker, company):
+                continue
+
             articles.append(_article(
-                title=art.get("title", ""),
-                summary=art.get("description", "") or art.get("content", ""),
+                title=title,
+                summary=summary,
                 source=art.get("source", {}).get("name", "NewsAPI"),
                 published=published,
                 url=art.get("url", ""),
                 ticker=ticker,
             ))
-        logger.info(f"NewsAPI: {len(articles)} articles for {ticker}")
+            if len(articles) >= max_articles:
+                break
+
+        logger.info(f"NewsAPI: {len(articles)} relevant articles for {ticker}")
     except Exception as e:
         logger.warning(f"NewsAPI failed for {ticker}: {e}")
     return articles
@@ -298,10 +357,25 @@ def fetch_gdelt(ticker: str, company_name: str = "", max_articles: int = 25) -> 
 
 # Map common tickers to company names (for GDELT queries)
 TICKER_NAMES = {
+    # Tech
     "AAPL": "Apple", "MSFT": "Microsoft", "NVDA": "NVIDIA",
-    "TSLA": "Tesla", "AMZN": "Amazon", "META": "Meta",
-    "GOOGL": "Google Alphabet", "AMD": "AMD", "SPY": "S&P 500 ETF",
-    "QQQ": "Nasdaq ETF",
+    "TSLA": "Tesla", "AMZN": "Amazon", "META": "Meta Platforms",
+    "GOOGL": "Alphabet Google", "AMD": "Advanced Micro Devices",
+    "INTC": "Intel", "QCOM": "Qualcomm", "MU": "Micron Technology",
+    "CRM": "Salesforce", "ORCL": "Oracle", "NFLX": "Netflix",
+    "PYPL": "PayPal",
+    # Finance
+    "JPM": "JPMorgan Chase", "BAC": "Bank of America",
+    "GS": "Goldman Sachs", "V": "Visa", "MA": "Mastercard",
+    # Healthcare
+    "UNH": "UnitedHealth", "JNJ": "Johnson Johnson",
+    # Consumer
+    "WMT": "Walmart", "COST": "Costco", "HD": "Home Depot", "DIS": "Disney",
+    # Energy
+    "XOM": "ExxonMobil", "CVX": "Chevron",
+    # ETFs (broad — ticker itself is best search term)
+    "SPY": "S&P 500", "QQQ": "Nasdaq 100", "IWM": "Russell 2000",
+    "DIA": "Dow Jones", "GLD": "Gold", "SLV": "Silver",
 }
 
 
@@ -364,6 +438,10 @@ def fetch_news(
             logger.info(f"GDELT fallback contributed {len(gdelt)} articles")
             all_articles.extend(gdelt)
 
+    # Final relevance pass — catches anything that slipped through provider-level filters
+    company = TICKER_NAMES.get(ticker.upper(), ticker)
+    all_articles = [a for a in all_articles if _is_relevant(a["title"], a["summary"], ticker, company)]
+
     # Deduplicate by URL, sort newest first, cap at max_art
     seen_urls = set()
     unique = []
@@ -372,5 +450,5 @@ def fetch_news(
             seen_urls.add(a["url"])
             unique.append(a)
 
-    logger.info(f"Total unique articles for {ticker}: {len(unique)} (from {len(all_articles)} raw)")
+    logger.info(f"Total unique relevant articles for {ticker}: {len(unique)} (from {len(all_articles)} after filtering)")
     return unique[:max_art]
