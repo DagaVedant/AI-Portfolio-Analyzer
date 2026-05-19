@@ -86,7 +86,7 @@ def compute_covariance(
         try:
             from sklearn.covariance import LedoitWolf
             lw = LedoitWolf()
-            lw.fit(daily_ret.values)
+            lw.fit(np.array(daily_ret.values, copy=True))
             cov_daily = pd.DataFrame(lw.covariance_, index=daily_ret.columns, columns=daily_ret.columns)
         except Exception:
             cov_daily = daily_ret.cov()
@@ -293,8 +293,17 @@ def optimize_portfolio(
     )
     cov_df = compute_covariance(price_df)
 
-    mu  = mu_series[tickers].values
-    cov = cov_df.loc[tickers, tickers].values
+    mu = np.array(
+        mu_series[tickers].values,
+        dtype=float,
+        copy=True
+    )
+
+    cov = np.array(
+        cov_df.loc[tickers, tickers].values,
+        dtype=float,
+        copy=True
+    )
 
     # Ensure positive semi-definite (add small jitter)
     cov += np.eye(n) * 1e-8
@@ -328,7 +337,11 @@ def optimize_portfolio(
 
     # Clip and re-normalise (final safety net)
     weights  = np.clip(weights, min_w, max_w)
-    weights /= weights.sum()
+    weights_sum = weights.sum()
+    if weights_sum <= 1e-12:
+        weights = np.ones(n) / n
+    else:
+        weights /= weights_sum
 
     exp_ret = portfolio_return(weights, mu)
     exp_vol = portfolio_volatility(weights, cov)

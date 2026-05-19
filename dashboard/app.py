@@ -1,19 +1,3 @@
-"""
-app.py — Redesigned dashboard for the AI Portfolio Analyzer.
-
-Run with:
-    streamlit run dashboard/app.py
-
-Changes:
-  - Removed Portfolio tab
-  - Removed all emojis from interface
-  - Full-screen loading animation while model runs
-  - NewsAPI used as primary sentiment provider
-  - Removed rotating animation
-  - Trimmed Overview: shows prediction prices instead of SMA/Volume
-  - Smooth CSS animations throughout
-"""
-
 import sys
 import os
 
@@ -375,8 +359,8 @@ with st.sidebar:
     horizon = st.slider("Forecast horizon (days)", min_value=5, max_value=63, value=21, step=1)
 
     st.markdown("---")
-    run_btn = st.button("Analyse", use_container_width=True, type="primary")
-    clear_btn = st.button("Clear", use_container_width=True)
+    run_btn = st.button("Analyse", width= 'content', type="primary")
+    clear_btn = st.button("Clear", width= 'content')
 
     if clear_btn:
         st.session_state.result = None
@@ -564,12 +548,12 @@ with tab_overview:
     with col_chart:
         fig = price_chart(ticker, lookback_days=180)
         if fig:
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig, width= 'content', config={"displayModeBar": False})
     with col_side:
         ws = sf.get("weighted_sentiment", 0.0)
         fig_g = sentiment_gauge(ws, label="Sentiment Score")
         if fig_g:
-            st.plotly_chart(fig_g, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig_g, width= 'content', config={"displayModeBar": False})
 
         st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
         risk_score = result.get("risk_score", 0)
@@ -599,7 +583,7 @@ with tab_forecast:
     st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
     fig_fc = forecast_chart(result)
     if fig_fc:
-        st.plotly_chart(fig_fc, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_fc, width= 'content', config={"displayModeBar": False})
     else:
         st.info("Forecast chart unavailable — check market data.")
 
@@ -626,7 +610,7 @@ with tab_risk:
     st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
     fig_rb = risk_breakdown_chart(result)
     if fig_rb:
-        st.plotly_chart(fig_rb, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_rb, width= 'content', config={"displayModeBar": False})
 
 
 # ── Tab 4: News / Sentiment ────────────────────────────────────────────────
@@ -642,16 +626,16 @@ with tab_charts:
     with col_vol:
         fig_vol = volatility_chart(ticker)
         if fig_vol:
-            st.plotly_chart(fig_vol, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig_vol, width= 'content', config={"displayModeBar": False})
         else:
             st.info("Volatility chart unavailable.")
     with col_dd:
         fig_dd = drawdown_chart(ticker)
         if fig_dd:
-            st.plotly_chart(fig_dd, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig_dd, width= 'content', config={"displayModeBar": False})
         else:
             st.info("Drawdown chart unavailable.")
 
     fig_price_full = price_chart(ticker, lookback_days=365)
     if fig_price_full:
-        st.plotly_chart(fig_price_full, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_price_full, width= 'content', config={"displayModeBar": False})
