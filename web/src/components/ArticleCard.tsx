@@ -23,13 +23,13 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({ article }) => {
       </h3>
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-mono text-text-muted">
-          {article.source} · {formatAge(article.age_hours)}
+          {article.source} ï¿½ {formatAge(article.age_hours)}
         </span>
         <span
           className="text-xs font-mono font-bold px-2 py-1 rounded"
           style={{ backgroundColor: `${color}18`, color }}
         >
-          {article.sentiment.label.toUpperCase()} {article.sentiment.score:+.2f}
+          {article.sentiment.label.toUpperCase()} {(article.sentiment.score > 0 ? '+' : '') + article.sentiment.score.toFixed(2)}
         </span>
       </div>
     </a>
