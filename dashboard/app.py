@@ -359,7 +359,7 @@ with st.sidebar:
     horizon = st.slider("Forecast horizon (days)", min_value=5, max_value=63, value=21, step=1)
 
     st.markdown("---")
-    run_btn = st.button("Analyse", width= 'content', type="primary")
+    run_btn = st.button("Analyze", width= 'content', type="primary")
     clear_btn = st.button("Clear", width= 'content')
 
     if clear_btn:
@@ -419,7 +419,7 @@ if result is None:
         <div style="text-align:center;padding:90px 20px">
             <div style="font-size:1.9rem;font-weight:800;color:#dde4f0;margin-bottom:12px;
                         font-family:'Syne',sans-serif;letter-spacing:-0.03em;animation:fadeUp 0.5s ease">
-                Enter a ticker and click Analyse
+                Enter a ticker and click Analyze
             </div>
             <div style="font-size:0.8rem;line-height:1.9;font-family:'JetBrains Mono',monospace;
                         color:#2e4060">
