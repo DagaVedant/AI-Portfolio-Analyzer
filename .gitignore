@@ -63,3 +63,8 @@ htmlcov/
 # ── Logs ─────────────────────────────────────────────────────
 *.log
 logs/
+
+# ── Documentation (planning files, not committed) ────────────
+improvements.md
+implementation_prompts.md
+docs/
