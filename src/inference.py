@@ -399,7 +399,11 @@ def run_inference(ticker: str, cfg: Dict) -> Dict:
     # ── 9. Portfolio suggestion (single ticker vs peers) ──────────────────
     portfolio_result = _single_ticker_portfolio(ticker, cfg, pred_return)
 
-    # ── 10. Assemble result dict ───────────────────────────────────────────
+    # ── 10. Prepare chart data ────────────────────────────────────────────────
+    # Fetch full year of data for extended price history and volatility calculations
+    chart_data = _prepare_chart_data(ticker, raw_for_price)
+    
+    # ── 11. Assemble result dict ───────────────────────────────────────────
     result = dict(
         # Identity
         ticker=ticker,
@@ -440,6 +444,8 @@ def run_inference(ticker: str, cfg: Dict) -> Dict:
         articles=articles[:20],   # top 20 articles for display
         # Portfolio
         portfolio=portfolio_result,
+        # Chart data
+        chart_data=chart_data,
     )
     return result
 
@@ -482,6 +488,55 @@ def _single_ticker_portfolio(ticker: str, cfg: Dict, pred_return: float) -> Dict
             risk_contributions={},
             method="equal_weight_fallback",
         )
+
+
+def _prepare_chart_data(ticker: str, price_data: Optional[pd.DataFrame]) -> Dict:
+    """Extract chart data: price history, volatility, drawdown."""
+    if price_data is None or price_data.empty:
+        return {
+            "dates": [],
+            "prices": [],
+            "volatility_windows": [],
+            "drawdown_windows": [],
+        }
+    
+    try:
+        # Fetch full year of data for extended chart
+        end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        start = (pd.Timestamp.now() - pd.Timedelta(days=365)).strftime("%Y-%m-%d")
+        yearly_data = yf.download(ticker, start=start, end=end, auto_adjust=True, progress=False)
+        
+        if isinstance(yearly_data.columns, pd.MultiIndex):
+            yearly_data.columns = yearly_data.columns.get_level_values(0)
+        
+        if yearly_data.empty:
+            yearly_data = price_data
+        
+        prices = yearly_data["Close"].values.tolist()
+        dates = yearly_data.index.strftime("%Y-%m-%d").tolist()
+        
+        # Rolling 30-day volatility
+        returns = yearly_data["Close"].pct_change().fillna(0)
+        volatility_windows = (returns.rolling(window=30).std() * np.sqrt(252) * 100).values.tolist()
+        
+        # Rolling drawdown
+        cummax = yearly_data["Close"].cummax()
+        drawdown_windows = ((yearly_data["Close"] - cummax) / cummax * 100).values.tolist()
+        
+        return {
+            "dates": dates,
+            "prices": prices,
+            "volatility_windows": volatility_windows,
+            "drawdown_windows": drawdown_windows,
+        }
+    except Exception as e:
+        logger.warning(f"Could not prepare chart data for {ticker}: {e}")
+        return {
+            "dates": [],
+            "prices": [],
+            "volatility_windows": [],
+            "drawdown_windows": [],
+        }
 
 
 def _error_result(ticker: str, message: str) -> Dict:

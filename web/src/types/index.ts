@@ -34,8 +34,18 @@ export interface AnalysisResult {
   articles: NewsArticle[];
   sentiment_adjustment: SentimentAdjustment;
   
+  // Chart data
+  chart_data: ChartData;
+  
   timestamp: string;
   error?: string;
+}
+
+export interface ChartData {
+  dates: string[];
+  prices: number[];
+  volatility_windows: number[];
+  drawdown_windows: number[];
 }
 
 export interface SentimentFeatures {
