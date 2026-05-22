@@ -1,13 +1,6 @@
-# ============================================================
-# AI Portfolio Analyzer — .gitignore
-# ============================================================
-
-# ── Secrets ──────────────────────────────────────────────────
 .env
 *.key
 secrets/
-
-# ── Python ───────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -19,52 +12,31 @@ dist/
 .eggs/
 *.egg
 .installed.cfg
-
-# ── Virtual environments ─────────────────────────────────────
 venv/
 env/
 .venv/
 .env/
 ENV/
-
-# ── Data (raw & processed) ───────────────────────────────────
 data/raw/
 data/processed/
-# Uncomment below to ALSO ignore notebooks outputs:
-# notebooks/.ipynb_checkpoints/
-
-# ── Model checkpoints ────────────────────────────────────────
 checkpoints/
-# Keep the directory itself
 !checkpoints/.gitkeep
-
-# ── Reports & figures ────────────────────────────────────────
 reports/figures/*.html
 reports/figures/*.png
 reports/figures/*.pdf
-
-# ── Weights & Biases ─────────────────────────────────────────
 wandb/
-
-# ── IDE ──────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
 .DS_Store
 Thumbs.db
-
-# ── Coverage / testing ───────────────────────────────────────
 .coverage
 htmlcov/
 .pytest_cache/
 .mypy_cache/
-
-# ── Logs ─────────────────────────────────────────────────────
 *.log
 logs/
-
-# ── Documentation (planning files, not committed) ────────────
 improvements.md
 implementation_prompts.md
 docs/
