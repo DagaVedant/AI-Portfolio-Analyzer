@@ -51,10 +51,9 @@ data:
   end_date: "2024-12-31"
   raw_dir: data/raw
   processed_dir: data/processed
-  sequence_length: 60          # look-back window (trading days)
-  forecast_horizon: 21         # predict ~1 month ahead
+  sequence_length: 60
+  forecast_horizon: 21
 
-# --- Feature Engineering ---
 features:
   use_technical: true
   use_sentiment: true
@@ -153,7 +152,7 @@ wandb:
 
 # --- Dashboard Defaults ---
 dashboard:
-  default_ticker: AAPL
+  default_ticker: GLD
   default_horizon: 21
   theme: dark
   host: "0.0.0.0"
