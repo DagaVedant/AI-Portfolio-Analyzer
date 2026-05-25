@@ -100,10 +100,10 @@ python src/train.py --config configs/config.yaml --ticker AAPL
 streamlit run dashboard/app.py
 ```
 
-Open **http://localhost:8501**, type a ticker (e.g. `NVDA`), click **Analyse**.
+Open **http://localhost:8501**, type a ticker (e.g. `NVDA`), click **Analyze**.
 
 ---
-
+gt
 ## Configuration
 
 All settings live in `configs/config.yaml`. Key sections:

@@ -9,7 +9,7 @@ export const Header: React.FC = () => {
         </h1>
       </div>
       <p className="text-text-muted text-sm font-mono tracking-wide">
-        ML-driven forecasts · News sentiment via NewsAPI · Risk projection
+        ML-driven forecasts + News sentiment via NewsAPI + Risk projection
       </p>
     </div>
   );

@@ -13,10 +13,10 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ ticker, show }) 
       <div className="w-24 h-24 border-4 border-border-color border-t-accent-green rounded-full animate-spin-slow mb-6" />
       <div className="text-center">
         <div className="font-mono text-lg font-bold text-accent-green tracking-wider uppercase">
-          Analysing {ticker}
+          Analyzing {ticker}
         </div>
         <div className="font-mono text-sm text-text-muted mt-2">
-          NewsAPI · FinBERT · LSTM model
+          NewsAPI + FinBERT + LSTM model
         </div>
       </div>
     </div>

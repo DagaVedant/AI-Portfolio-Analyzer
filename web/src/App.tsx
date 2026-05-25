@@ -65,7 +65,7 @@ export const App: React.FC = () => {
               <div className="text-center">
                 <h1 className="text-4xl font-bold mb-3">Enter a ticker and click Analyze</h1>
                 <p className="text-text-muted mb-8">
-                  ML-powered return forecasts � risk projections � live NewsAPI sentiment
+                  ML-powered return forecasts + risk projections + live NewsAPI sentiment
                 </p>
                 <div className="flex gap-2 flex-wrap justify-center">
                   {['AAPL', 'MSFT', 'NVDA', 'TSLA', 'META', 'SPY', 'QQQ'].map((t) => (
